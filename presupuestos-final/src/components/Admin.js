@@ -1,0 +1,233 @@
+import { useState, useEffect } from 'react';
+import { supabase } from '../supabase';
+import { S, Label, Toast, Modal } from '../styles';
+
+export default function Admin({ onLogoChange }) {
+  const [cfg, setCfg]         = useState({ oh_pct:15, bco_pct:5.5, fee_agencia:5, rebate_pct:2 });
+  const [categorias, setCats] = useState([]);
+  const [clientes, setClis]   = useState([]);
+  const [toast, setToast]     = useState('');
+  const [newCat, setNewCat]   = useState('');
+  const [newCli, setNewCli]   = useState({ nombre:'', ruc:'', contacto:'', email:'' });
+  const [editCli, setEditCli] = useState(null);
+  const [tab, setTab]         = useState('config');
+  const [saving, setSaving]   = useState(false);
+  const [newUser, setNewUser] = useState({ email:'', password:'', nombre:'', role:'user' });
+  const [logoPreview, setLogoPreview] = useState(null);
+
+  useEffect(()=>{
+    fetchAll();
+    const saved=localStorage.getItem('matilda_logo');
+    if(saved)setLogoPreview(saved);
+  },[]);
+
+  async function fetchAll(){
+    const[cfgR,catR,cliR]=await Promise.all([
+      supabase.from('config').select('*').single(),
+      supabase.from('categorias').select('*').order('nombre'),
+      supabase.from('clientes').select('*').order('nombre'),
+    ]);
+    if(cfgR.data)setCfg(cfgR.data);
+    if(catR.data)setCats(catR.data);
+    if(cliR.data)setClis(cliR.data);
+  }
+  function showToast(m){setToast(m);setTimeout(()=>setToast(''),2500);}
+
+  async function saveCfg(){
+    setSaving(true);
+    const{error}=await supabase.from('config').upsert({id:1,...cfg});
+    setSaving(false);
+    if(error){showToast('Error: '+error.message);return;}
+    showToast('Configuración guardada ✓');
+  }
+
+  async function addCat(){
+    if(!newCat.trim())return;
+    const{error}=await supabase.from('categorias').insert({nombre:newCat.trim().toUpperCase()});
+    if(error){showToast('Error: '+error.message);return;}
+    setNewCat('');fetchAll();showToast('Categoría agregada ✓');
+  }
+
+  async function deleteCat(id){
+    if(!window.confirm('¿Eliminar categoría?'))return;
+    await supabase.from('categorias').delete().eq('id',id);fetchAll();
+  }
+
+  async function saveCli(){
+    if(!newCli.nombre.trim())return;
+    const{error}=await supabase.from('clientes').insert(newCli);
+    if(error){showToast('Error: '+error.message);return;}
+    setNewCli({nombre:'',ruc:'',contacto:'',email:''});fetchAll();showToast('Cliente agregado ✓');
+  }
+
+  async function updateCli(){
+    const{error}=await supabase.from('clientes').update(editCli).eq('id',editCli.id);
+    if(error){showToast('Error: '+error.message);return;}
+    setEditCli(null);fetchAll();showToast('Cliente actualizado ✓');
+  }
+
+  async function deleteCli(id){
+    if(!window.confirm('¿Eliminar cliente?'))return;
+    await supabase.from('clientes').delete().eq('id',id);fetchAll();
+  }
+
+  async function createUser(){
+    if(!newUser.email||!newUser.password){showToast('Email y contraseña requeridos');return;}
+    const{error}=await supabase.auth.admin.createUser({email:newUser.email,password:newUser.password,email_confirm:true,user_metadata:{nombre:newUser.nombre,role:newUser.role}});
+    if(error){showToast('Error: '+error.message);return;}
+    setNewUser({email:'',password:'',nombre:'',role:'user'});showToast('Usuario creado ✓');
+  }
+
+  function handleLogo(e){
+    const file=e.target.files[0];if(!file)return;
+    const reader=new FileReader();
+    reader.onload=ev=>{
+      const data=ev.target.result;
+      setLogoPreview(data);
+      localStorage.setItem('matilda_logo',data);
+      if(onLogoChange)onLogoChange(data);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  const TABS=[['config','⚙️ Config'],['categorias','🏷️ Categorías'],['clientes','🏢 Clientes'],['usuarios','👥 Usuarios'],['logo','🖼️ Logo & Marca']];
+
+  return(
+    <div>
+      <h2 style={{fontSize:20,fontWeight:700,color:'#0d3b5e',marginBottom:16}}>⚙️ Administración</h2>
+      <div style={{display:'flex',gap:6,marginBottom:20,borderBottom:'2px solid #dde6ef',paddingBottom:0}}>
+        {TABS.map(([k,l])=>(
+          <button key={k} onClick={()=>setTab(k)} style={{padding:'8px 14px',border:'none',borderBottom:tab===k?'2px solid #c8264a':'2px solid transparent',background:'none',cursor:'pointer',fontSize:13,fontWeight:tab===k?700:400,color:tab===k?'#c8264a':'#5a7a9a',marginBottom:-2}}>
+            {l}
+          </button>
+        ))}
+      </div>
+
+      {tab==='config'&&(
+        <div style={S.card}>
+          <h3 style={{fontSize:15,fontWeight:700,color:'#0d3b5e',marginBottom:6}}>Porcentajes globales</h3>
+          <p style={{fontSize:12,color:'#8aa0b8',marginBottom:16}}>⚠️ Solo aplica a presupuestos nuevos creados después del cambio.</p>
+          <div style={S.grid4}>
+            {[['OH (%)','oh_pct'],['BCO (%)','bco_pct'],['Fee agencia (%)','fee_agencia'],['Rebate (%)','rebate_pct']].map(([l,k])=>(
+              <div key={k}><Label>{l}</Label><input type="number" step="0.1" style={S.input} value={cfg[k]||0} onChange={e=>setCfg(p=>({...p,[k]:parseFloat(e.target.value)||0}))}/></div>
+            ))}
+          </div>
+          <div style={{marginTop:16}}><button style={S.btnPrimary} onClick={saveCfg} disabled={saving}>{saving?'Guardando…':'💾 Guardar configuración'}</button></div>
+        </div>
+      )}
+
+      {tab==='categorias'&&(
+        <div style={S.card}>
+          <h3 style={{fontSize:15,fontWeight:700,color:'#0d3b5e',marginBottom:16}}>Categorías de ítems</h3>
+          <div style={{display:'flex',gap:8,marginBottom:16}}>
+            <input style={{...S.input,flex:1}} value={newCat} onChange={e=>setNewCat(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addCat()} placeholder="Nueva categoría…"/>
+            <button style={S.btnPrimary} onClick={addCat}>+ Agregar</button>
+          </div>
+          <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
+            {categorias.map(c=>(
+              <div key={c.id} style={{display:'flex',alignItems:'center',gap:6,background:'#eef4fb',border:'1px solid #c8d8e8',borderRadius:6,padding:'5px 10px'}}>
+                <span style={{fontSize:13,fontWeight:600,color:'#0d3b5e'}}>{c.nombre}</span>
+                <button onClick={()=>deleteCat(c.id)} style={{background:'none',border:'none',cursor:'pointer',color:'#c8264a',fontSize:14}}>✕</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {tab==='clientes'&&(
+        <div>
+          <div style={S.card}>
+            <h3 style={{fontSize:15,fontWeight:700,color:'#0d3b5e',marginBottom:14}}>Agregar cliente</h3>
+            <div style={S.grid2}>
+              <div><Label>Nombre / Razón social *</Label><input style={S.input} value={newCli.nombre} onChange={e=>setNewCli(p=>({...p,nombre:e.target.value}))}/></div>
+              <div><Label>RUC / Cédula</Label><input style={S.input} value={newCli.ruc} onChange={e=>setNewCli(p=>({...p,ruc:e.target.value}))}/></div>
+              <div><Label>Contacto</Label><input style={S.input} value={newCli.contacto} onChange={e=>setNewCli(p=>({...p,contacto:e.target.value}))}/></div>
+              <div><Label>Email</Label><input style={S.input} value={newCli.email} onChange={e=>setNewCli(p=>({...p,email:e.target.value}))}/></div>
+            </div>
+            <button style={{...S.btnPrimary,marginTop:12}} onClick={saveCli}>+ Agregar cliente</button>
+          </div>
+          <div style={S.card}>
+            <h3 style={{fontSize:15,fontWeight:700,color:'#0d3b5e',marginBottom:14}}>Lista de clientes ({clientes.length})</h3>
+            <table style={S.table}>
+              <thead><tr>{['Nombre','RUC','Contacto','Email',''].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
+              <tbody>
+                {clientes.map(c=>(
+                  <tr key={c.id}>
+                    <td style={S.td}><strong>{c.nombre}</strong></td>
+                    <td style={S.td}>{c.ruc}</td><td style={S.td}>{c.contacto}</td><td style={S.td}>{c.email}</td>
+                    <td style={S.td}><div style={{display:'flex',gap:4}}><button style={S.btnSm} onClick={()=>setEditCli({...c})}>✏️</button><button style={S.btnRed} onClick={()=>deleteCli(c.id)}>🗑</button></div></td>
+                  </tr>
+                ))}
+                {clientes.length===0&&<tr><td colSpan={5} style={{...S.td,textAlign:'center',color:'#8aa0b8'}}>Sin clientes</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {tab==='usuarios'&&(
+        <div style={S.card}>
+          <h3 style={{fontSize:15,fontWeight:700,color:'#0d3b5e',marginBottom:16}}>Crear usuario</h3>
+          <div style={S.grid2}>
+            <div><Label>Nombre</Label><input style={S.input} value={newUser.nombre} onChange={e=>setNewUser(p=>({...p,nombre:e.target.value}))}/></div>
+            <div><Label>Rol</Label><select style={S.select} value={newUser.role} onChange={e=>setNewUser(p=>({...p,role:e.target.value}))}><option value="user">Usuario</option><option value="admin">Administrador</option></select></div>
+            <div><Label>Email *</Label><input style={S.input} type="email" value={newUser.email} onChange={e=>setNewUser(p=>({...p,email:e.target.value}))}/></div>
+            <div><Label>Contraseña *</Label><input style={S.input} type="password" value={newUser.password} onChange={e=>setNewUser(p=>({...p,password:e.target.value}))}/></div>
+          </div>
+          <button style={{...S.btnPrimary,marginTop:14}} onClick={createUser}>+ Crear usuario</button>
+          <p style={{fontSize:12,color:'#8aa0b8',marginTop:10}}>Para ver o eliminar usuarios ve a Supabase → Authentication → Users.</p>
+        </div>
+      )}
+
+      {tab==='logo'&&(
+        <div style={S.card}>
+          <h3 style={{fontSize:15,fontWeight:700,color:'#0d3b5e',marginBottom:16}}>🖼️ Logo de Matilda</h3>
+          <p style={{fontSize:13,color:'#5a7a9a',marginBottom:16}}>El logo aparecerá en la esquina superior izquierda de la app y en todos los PDFs generados.</p>
+          <div style={{display:'flex',alignItems:'flex-start',gap:24}}>
+            <div style={{flex:1}}>
+              <Label>Subir logo (PNG o JPG recomendado, fondo transparente ideal)</Label>
+              <input type="file" accept="image/*" onChange={handleLogo} style={{marginTop:8,fontSize:13}}/>
+            </div>
+            <div style={{textAlign:'center'}}>
+              <Label>Vista previa</Label>
+              <div style={{marginTop:8,padding:12,background:'#0d3b5e',borderRadius:8,minWidth:160,minHeight:80,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                {logoPreview
+                  ?<img src={logoPreview} alt="logo" style={{maxHeight:60,maxWidth:140,objectFit:'contain'}}/>
+                  :<span style={{color:'#8ab4d4',fontSize:12}}>Sin logo</span>}
+              </div>
+              <div style={{fontSize:11,color:'#8aa0b8',marginTop:6}}>Así se ve en el header</div>
+            </div>
+          </div>
+          <div style={{marginTop:20,padding:14,background:'#f0f4f8',borderRadius:8}}>
+            <div style={{fontSize:13,fontWeight:700,color:'#0d3b5e',marginBottom:8}}>Colores de marca Matilda</div>
+            <div style={{display:'flex',gap:10}}>
+              {[['Azul marino','#0d3b5e'],['Fucsia','#c8264a'],['Teal','#3dbfb8'],['Blanco','#ffffff']].map(([l,c])=>(
+                <div key={c} style={{textAlign:'center'}}>
+                  <div style={{width:40,height:40,borderRadius:8,background:c,border:'1px solid #dde6ef',margin:'0 auto 4px'}}/>
+                  <div style={{fontSize:10,color:'#5a7a9a'}}>{l}</div>
+                  <div style={{fontSize:9,fontFamily:'monospace',color:'#8aa0b8'}}>{c}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editCli&&(
+        <Modal title="Editar cliente" onClose={()=>setEditCli(null)}>
+          <div style={{display:'flex',flexDirection:'column',gap:12}}>
+            <div><Label>Nombre</Label><input style={S.input} value={editCli.nombre} onChange={e=>setEditCli(p=>({...p,nombre:e.target.value}))}/></div>
+            <div><Label>RUC</Label><input style={S.input} value={editCli.ruc||''} onChange={e=>setEditCli(p=>({...p,ruc:e.target.value}))}/></div>
+            <div><Label>Contacto</Label><input style={S.input} value={editCli.contacto||''} onChange={e=>setEditCli(p=>({...p,contacto:e.target.value}))}/></div>
+            <div><Label>Email</Label><input style={S.input} value={editCli.email||''} onChange={e=>setEditCli(p=>({...p,email:e.target.value}))}/></div>
+            <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:8}}>
+              <button style={S.btnSecondary} onClick={()=>setEditCli(null)}>Cancelar</button>
+              <button style={S.btnPrimary} onClick={updateCli}>Guardar</button>
+            </div>
+          </div>
+        </Modal>
+      )}
+      <Toast msg={toast}/>
+    </div>
+  );
+}
