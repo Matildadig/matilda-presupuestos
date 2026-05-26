@@ -178,31 +178,54 @@ export function generateExcelFinancieroData(ppto) {
   rows.push(['PAX:', ppto.personas || '']);
   rows.push([]);
   rows.push([
-    'Categoría','Ítem','Detalle','Cantidad','Días','Costo Total','OH%','OH $','BCO%','BCO $',
-    'Total Costo','Precio Unit.','Precio Total','Margen','Proveedor','Info'
+    'Categoría','Ítem','Detalle','Cantidad','Días',
+    'Costo Unit. Cotizado','Costo Total Cotizado','OH%','OH $','BCO%','BCO $','Total Costo Cotizado',
+    'Costo Unit. Real','Costo Total Real','Total Costo Real c/OH+BCO','Ahorro',
+    'Precio Unit.','Precio Total','Margen Cotizado','% Margen Cotizado','Margen Real','% Margen Real',
+    'Proveedor','Info'
   ]);
 
   (ppto.items || []).forEach(it => {
     const c = calcItem(it);
+    const tieneReal = it.costo_real_unit !== null && it.costo_real_unit !== undefined;
     rows.push([
       it.categoria||'', it.item||'', it.detalle||'',
       c.cantidad, c.dias,
-      c.costo, it.oh_pct||15, c.ohVal, it.bco_pct||5.5, c.bcoVal,
-      c.totalCosto, c.precioU, c.precio, c.margen,
+      c.costoUnit, c.costoTotal, it.oh_pct??15, c.ohVal, it.bco_pct??5.5, c.bcoVal, c.totalCosto,
+      tieneReal ? c.costoRealUnit : '',
+      tieneReal ? c.costoRealTotal : '',
+      tieneReal ? c.totalCostoReal : '',
+      tieneReal ? c.ahorro : '',
+      c.precioU, c.precio,
+      c.margen, (c.margenPct).toFixed(1)+'%',
+      tieneReal ? c.margenReal : '',
+      tieneReal ? (c.margenRealPct).toFixed(1)+'%' : '',
       it.proveedor||'', it.info||''
     ]);
   });
 
   const t = calcPpto(ppto);
   rows.push([]);
-  rows.push(['','','','','','','','','','','','','SUBTOTAL COSTO','SUBTOTAL PRECIO','','' ]);
-  rows.push(['','','','','','','','','','','','',t.subtotalCosto, t.subtotalPrecio,'','']);
-  rows.push(['','','','','','','','','','','','',`Fee ${ppto.fee_agencia}%`, t.feeAgencia,'','']);
-  if (ppto.apply_rebate) rows.push(['','','','','','','','','','','','',`Rebate ${ppto.rebate_pct}%`, -t.rebate,'','']);
-  rows.push(['','','','','','','','','','','','','TOTAL SIN IVA', t.totalSinIva,'','']);
-  rows.push(['','','','','','','','','','','','','IVA 15%', t.iva15,'','']);
-  rows.push(['','','','','','','','','','','','','TOTAL CON IVA', t.totalConIva,'','']);
-  rows.push(['','','','','','','','','','','','','MARGEN TOTAL', t.margenTotal,'','']);
+  rows.push(['RESUMEN FINANCIERO']);
+  rows.push(['Subtotal costo cotizado:', t.subtotalCosto]);
+  if (t.subtotalCostoReal > 0) {
+    rows.push(['Subtotal costo real:', t.subtotalCostoReal]);
+    rows.push(['Ahorro total:', t.subtotalAhorro]);
+  }
+  rows.push(['Subtotal precio cliente:', t.subtotalPrecio]);
+  rows.push([`Fee agencia ${ppto.fee_agencia??0}%:`, t.feeAgencia]);
+  rows.push(['Total sin IVA:', t.totalSinIva]);
+  rows.push(['IVA 15%:', t.iva15]);
+  rows.push(['Total con IVA:', t.totalConIva]);
+  rows.push(['Margen cotizado:', t.margenTotal, `${t.margenPct.toFixed(1)}%`]);
+  if (t.subtotalCostoReal > 0) {
+    rows.push(['Margen real:', t.margenRealTotal, `${t.margenRealPct.toFixed(1)}%`]);
+  }
+  if (ppto.apply_rebate) {
+    rows.push([`Rebate ${ppto.rebate_pct??0}% (nota de crédito):`, t.rebate]);
+    rows.push(['Utilidad con rebate:', t.utilidadConRebate, `${t.utilidadConRebatePct.toFixed(1)}%`]);
+  }
 
   return rows;
 }
+
