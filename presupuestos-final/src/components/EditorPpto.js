@@ -8,7 +8,7 @@ const ESTADOS = ['borrador','entregado','aprobado','a_facturar','facturado','can
 const ESTADO_LABELS = { borrador:'Borrador', entregado:'Entregado', aprobado:'Aprobado', a_facturar:'A facturar', facturado:'Facturado', cancelado:'Cancelado' };
 const SESSION_KEY = 'matilda_editor_draft';
 const SESSION_TAB = 'matilda_editor_tab';
-const ESTADOS_CIERRE = ['facturado']; // estados donde mostrar costo real
+const ESTADOS_CIERRE = ['aprobado','a_facturar','facturado']; // estados donde mostrar costo real
 
 function emptyItem(p) {
   return {
@@ -235,7 +235,8 @@ export default function EditorPpto({ ppto, onSave, onCancel, cfg, categorias, cl
                           </div>
                         </div>
 
-                        {/* COSTO REAL — siempre visible pero destacado en cierre */}
+                        {/* COSTO REAL — visible desde Aprobado */}
+                        {esCierre&&(
                         <div style={{gridColumn:'1/-1',background: tieneRealIngresado?'#edf7ed':'#f8fafc',borderRadius:8,padding:'10px 12px',border:`1px solid ${tieneRealIngresado?'#2e8b4e44':'#dde6ef'}`}}>
                           <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
                             <div style={{fontSize:12,fontWeight:700,color:tieneRealIngresado?'#2e8b4e':'#5a7a9a'}}>✅ Costo real (ejecutado)</div>
@@ -261,6 +262,7 @@ export default function EditorPpto({ ppto, onSave, onCancel, cfg, categorias, cl
                             </div>
                           )}
                         </div>
+                        )}
 
                         {/* PRECIO CLIENTE */}
                         <div style={{gridColumn:'1/-1',background:'#eef4fb',borderRadius:8,padding:'10px 12px',border:'1px solid #c8d8e8'}}>
@@ -292,6 +294,11 @@ export default function EditorPpto({ ppto, onSave, onCancel, cfg, categorias, cl
               );
             })}
             {p.items.length===0&&<div style={S.empty}>Sin ítems. Haz clic en "+ Agregar ítem" para comenzar.</div>}
+            {p.items.length>0&&(
+              <div style={{display:'flex',justifyContent:'center',paddingTop:8}}>
+                <button style={{...S.btnPrimary,background:'#c8264a',width:'100%'}} onClick={addItem}>+ Agregar ítem</button>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -492,3 +499,4 @@ export default function EditorPpto({ ppto, onSave, onCancel, cfg, categorias, cl
     </div>
   );
 }
+
