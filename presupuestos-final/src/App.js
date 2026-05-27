@@ -79,12 +79,35 @@ export default function App() {
   async function askAI(){
     if(!aiQuery.trim())return;
     setAiLoading(true);setAiResp('');
-    const ctx=pptos.map(p=>({nomenclatura:p.nomenclatura,nombre:p.nombre,cliente:p.cliente,fecha:p.fecha_evento,estado:p.estado,totalConIva:calcPpto(p).totalConIva,items:(p.items||[]).map(it=>({item:it.item,categoria:it.categoria,costo:it.costo,precio_unit:it.precio_unit,proveedor:it.proveedor}))}));
+    const ctx=pptos.map(p=>({
+      nomenclatura:p.nomenclatura, nombre:p.nombre, cliente:p.cliente,
+      fecha:p.fecha_evento, estado:p.estado,
+      totalConIva:calcPpto(p).totalConIva,
+      items:(p.items||[]).map(it=>({
+        item:it.item, categoria:it.categoria,
+        costo_unit:it.costo_unit, precio_unit:it.precio_unit,
+        proveedor:it.proveedor
+      }))
+    }));
+    const apiKey = process.env.REACT_APP_OPENAI_KEY;
+    if(!apiKey){ setAiResp('⚠️ Falta configurar REACT_APP_OPENAI_KEY en Vercel.'); setAiLoading(false); return; }
     try{
-      const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,system:`Asistente de presupuestos Matilda. Datos: ${JSON.stringify(ctx)}. Responde en español. Menciona nomenclatura, costos, precios y proveedores cuando sea relevante.`,messages:[{role:'user',content:aiQuery}]})});
+      const res=await fetch('https://api.openai.com/v1/chat/completions',{
+        method:'POST',
+        headers:{ 'Content-Type':'application/json', 'Authorization':`Bearer ${apiKey}` },
+        body:JSON.stringify({
+          model:'gpt-4o-mini',
+          max_tokens:1000,
+          messages:[
+            { role:'system', content:`Eres un asistente de presupuestos de eventos para Matilda Event Designers. Tienes acceso a ${pptos.length} presupuesto(s). Datos: ${JSON.stringify(ctx)}. Responde siempre en español. Cuando te pregunten por un ítem o servicio, menciona el nombre del presupuesto (nomenclatura), costo, precio al cliente, proveedor y fecha. Compara entre presupuestos si hay múltiples resultados. Sé conciso y claro.` },
+            { role:'user', content:aiQuery }
+          ]
+        })
+      });
       const data=await res.json();
-      setAiResp(data.content?.map(b=>b.text||'').join('')||'Sin respuesta');
-    }catch(e){setAiResp('Error: '+e.message);}
+      if(data.error){ setAiResp('Error OpenAI: '+data.error.message); }
+      else{ setAiResp(data.choices?.[0]?.message?.content||'Sin respuesta'); }
+    }catch(e){setAiResp('Error de conexión: '+e.message);}
     setAiLoading(false);
   }
 
@@ -378,3 +401,4 @@ function Shell({children,user,userRole,mainTab,setMainTab,logout,logoUrl}){
     </div>
   );
 }
+
